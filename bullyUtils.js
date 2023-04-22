@@ -1,5 +1,8 @@
 import random from "random";
 import axios from "axios";
+import AsyncLock from "async-lock";
+const lock = new AsyncLock();
+
 const ownPort = parseInt(process.env.PORT) || 3000;
 let receivedMasterAnnouncement = false;
 
@@ -51,15 +54,19 @@ export function onMasterAnnouncementReceived() {
 
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
+  console.log("Inside start election. Higher ports: ", higherPorts);
+  console.log("Inside start election. allPorts inc myself: ", allPorts);
   const electionPromises = higherPorts.map(async (port) => {
     try {
-      const response = await axios.post(
-        `http://localhost:${port}/proxy/${port}/election`,
-        { port: ownPort }
-      );
-      if (response.status === 200) {
-        return true;
-      }
+      await lock.acquire("postElection", async () => {
+        const response = await axios.post(
+          `http://localhost:${port}/proxy/${port}/election`,
+          { port: ownPort }
+        );
+        if (response.status === 200) {
+          return true;
+        }
+      });
     } catch (error) {
       console.error("Error in election request:", error);
     }
@@ -84,6 +91,7 @@ export async function startElection(node, higherPorts, allPorts) {
     console.error("Error in election promises:", error);
   }
 }
+
 export async function becomemaster(node, otherPorts) {
   node.isMaster = true;
   node.isElectionOngoing = false;
@@ -91,13 +99,13 @@ export async function becomemaster(node, otherPorts) {
   console.log("master", node);
 
   // Add a random delay between 100ms and 1000ms
-  const delay = Math.floor(Math.random() * (5000 - 1000) + 1000);
+  // const delay = Math.floor(Math.random() * (5000 - 1000) + 1000);
 
-  console.log(`Waiting for ${delay} seconds before announcing the master.`);
-  await new Promise((resolve) => setTimeout(resolve, delay));
+  // console.log(`Waiting for ${delay} seconds before announcing the master.`);
+  // await new Promise((resolve) => setTimeout(resolve, delay));
 
   let allPorts = otherPorts || [];
-  allPorts.push(ownPort);
+  // allPorts.push(ownPort);
 
   const masterPromises = allPorts.map(async (port) => {
     try {

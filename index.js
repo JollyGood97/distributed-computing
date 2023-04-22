@@ -10,14 +10,13 @@ import {
   onMasterAnnouncementReceived,
   startElection,
   waitForElection,
-  waitForNodesToStart,
 } from "./bullyUtils.js";
 import axios from "axios";
 import sidecarProxy from "./sidecarProxy.js";
 import bodyParser from "body-parser";
 
 const app = express();
-const port = parseInt(process.env.PORT) || 3000;
+const port = process.env.PORT || 3000;
 
 console.log("My details: " + JSON.stringify(node));
 
@@ -33,19 +32,19 @@ let masterId = null;
 // Register with Eureka Server
 const client = new eureka({
   instance: {
-    // instanceId: node.nodeId,
+    instanceId: node.nodeId,
     app: "password-cracker",
     hostName: "localhost",
     ipAddr: "127.0.0.1",
     statusPageUrl: `http://localhost:${process.env.PORT}/actuator/info`,
     healthCheckUrl: `http://localhost:${process.env.PORT}/actuator/health`,
-    vipAddress: "password-cracker",
+    vipAddress: `password-cracker-${port}.com`,
     dataCenterInfo: {
       name: "MyOwn",
       "@class": "com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo",
     },
     port: {
-      $: port,
+      $: Number(port),
       "@enabled": true,
     },
 
@@ -56,27 +55,28 @@ const client = new eureka({
     // },
   },
   eureka: {
-    // registryFetchInterval: 1,
-    // fetchRegistry: true,
+    registryFetchInterval: 100,
+    fetchRegistry: true,
+    fetchMetadata: true,
     host: "localhost",
     port: 8761,
     servicePath: "/eureka/apps/",
-    heartbeatInterval: 1000,
+    // heartbeatInterval: 1000,
   },
 });
 
-async function updateInstances() {
-  allInstances = client.getInstancesByAppId("password-cracker");
-  // @ts-ignore
-  ports = allInstances.map((instance) => instance.port.$);
-  allInstancesWithDetails = await getAllNodesDetails(ports);
-  higherNodes = allInstancesWithDetails.filter(
-    (otherNode) => otherNode.nodeId > node.nodeId
-  );
-  higherPorts = higherNodes.map((node) => node.port);
+// async function updateInstances() {
+//   allInstances = client.getInstancesByAppId("password-cracker");
+//   // @ts-ignore
+//   ports = allInstances.map((instance) => instance.port.$);
+//   allInstancesWithDetails = await getAllNodesDetails(ports);
+//   higherNodes = allInstancesWithDetails.filter(
+//     (otherNode) => otherNode.nodeId > node.nodeId
+//   );
+//   higherPorts = higherNodes.map((node) => node.port);
 
-  console.log("allInstancesWithDetails", allInstancesWithDetails);
-}
+//   console.log("allInstancesWithDetails", allInstancesWithDetails);
+// }
 
 // async function fetchEurekaInstances() {
 //   try {
@@ -90,30 +90,51 @@ async function updateInstances() {
 // }
 
 async function initiateElectionProcess() {
-  while (!node.masterNodeId) {
-    allInstances = client.getInstancesByAppId(`password-cracker`);
-    console.log("allInstances", allInstances);
-    // @ts-ignore
-    ports = allInstances.map((instance) => instance.port.$);
+  console.log("waiting for nodes to be discovered on the service registry...");
 
-    allInstancesWithDetails = await getAllNodesDetails(ports);
-    higherNodes = allInstancesWithDetails.filter(
-      (otherNode) => otherNode.nodeId > node.nodeId
-    );
-    higherPorts = higherNodes.map((node) => node.port);
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  allInstances = await client.getInstancesByAppId(`password-cracker`);
+  // console.log("allInstances", allInstances);
+  // @ts-ignore
+  ports = allInstances.map((instance) => instance.port.$);
+  console.log("ports", ports);
 
-    masterHasBeenElected = allInstancesWithDetails.some(
-      (node) => node.isMaster
-    );
-    isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
+  allInstancesWithDetails = await getAllNodesDetails(ports);
+  higherNodes = allInstancesWithDetails.filter(
+    (otherNode) => otherNode.nodeId > node.nodeId
+  );
+  higherPorts = higherNodes.map((node) => node.port);
 
-    if (!masterHasBeenElected && !isElectionOngoing) {
-      await waitForElection();
-      await startElection(node, higherPorts, ports);
-    }
+  masterHasBeenElected = allInstancesWithDetails.some((node) => node.isMaster);
+  isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
 
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for 1 second before checking again
+  if (!masterHasBeenElected && !isElectionOngoing) {
+    await waitForElection();
+    await startElection(node, higherPorts, ports);
   }
+}
+
+async function waitForNodesToStart() {
+  console.log("waiting for all nodes to start...");
+  const url = `http://localhost:${port}/actuator/health`;
+
+  const interval = setInterval(async () => {
+    try {
+      const res = await axios.get(url);
+      if (res.status === 200) {
+        clearInterval(interval);
+        console.log(`Node on port ${port} is up`);
+        const instances = await client.getInstancesByAppId("password-cracker");
+        // @ts-ignore
+        const ports = instances.map((instance) => instance.port.$);
+        console.log(`Ports of instances: ${ports}`);
+      }
+    } catch (error) {
+      console.log(
+        `Node on port ${port} is not up yet, error: ${error.message}`
+      );
+    }
+  }, 1000);
 }
 
 client.start(async (error) => {
@@ -180,11 +201,12 @@ app.post("/master", (req, res) => {
     `Node ID ${node.nodeId} says that Master announcement has been made. Master node ID is : ${masterId} and the ultimate bully.`
   );
   node.isElectionOngoing = false;
-  if (node.isMaster && masterId > node.nodeId) {
+  if (masterId > node.masterNodeId) {
     node.isMaster = false;
     masterHasBeenElected = true;
+    node.masterNodeId = masterId;
   }
-  node.masterNodeId = masterId;
+
   console.log("Node status inside announcement: ", node);
   res.status(200).send(`Node ${node.nodeId} accepts the master announcement.`);
 });
