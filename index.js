@@ -10,6 +10,7 @@ import {
   onMasterAnnouncementReceived,
   startElection,
   waitForElection,
+  waitForNodesToStart,
 } from "./bullyUtils.js";
 import axios from "axios";
 import sidecarProxy from "./sidecarProxy.js";
@@ -34,7 +35,7 @@ const client = new eureka({
   instance: {
     instanceId: node.nodeId,
     app: "password-cracker",
-    hostName: "localhost",
+    hostName: `localhost:${port}`,
     ipAddr: "127.0.0.1",
     statusPageUrl: `http://localhost:${process.env.PORT}/actuator/info`,
     healthCheckUrl: `http://localhost:${process.env.PORT}/actuator/health`,
@@ -93,7 +94,7 @@ async function initiateElectionProcess() {
   console.log("waiting for nodes to be discovered on the service registry...");
 
   await new Promise((resolve) => setTimeout(resolve, 5000));
-  allInstances = await client.getInstancesByAppId(`password-cracker`);
+  allInstances = client.getInstancesByAppId(`password-cracker`);
   // console.log("allInstances", allInstances);
   // @ts-ignore
   ports = allInstances.map((instance) => instance.port.$);
@@ -114,28 +115,28 @@ async function initiateElectionProcess() {
   }
 }
 
-async function waitForNodesToStart() {
-  console.log("waiting for all nodes to start...");
-  const url = `http://localhost:${port}/actuator/health`;
+// async function waitForNodesToStart() {
+//   console.log("waiting for all nodes to start...");
+//   const url = `http://localhost:${port}/actuator/health`;
 
-  const interval = setInterval(async () => {
-    try {
-      const res = await axios.get(url);
-      if (res.status === 200) {
-        clearInterval(interval);
-        console.log(`Node on port ${port} is up`);
-        const instances = await client.getInstancesByAppId("password-cracker");
-        // @ts-ignore
-        const ports = instances.map((instance) => instance.port.$);
-        console.log(`Ports of instances: ${ports}`);
-      }
-    } catch (error) {
-      console.log(
-        `Node on port ${port} is not up yet, error: ${error.message}`
-      );
-    }
-  }, 1000);
-}
+//   const interval = setInterval(async () => {
+//     try {
+//       const res = await axios.get(url);
+//       if (res.status === 200) {
+//         clearInterval(interval);
+//         console.log(`Node on port ${port} is up`);
+//         const instances = client.getInstancesByAppId("password-cracker");
+//         // @ts-ignore
+//         ports = [...ports, instances.map((instance) => instance.port.$)];
+//         console.log(`Ports of instances: ${ports}`);
+//       }
+//     } catch (error) {
+//       console.log(
+//         `Node on port ${port} is not up yet, error: ${error.message}`
+//       );
+//     }
+//   }, 1000);
+// }
 
 client.start(async (error) => {
   if (error) {
