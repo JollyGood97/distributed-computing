@@ -79,65 +79,6 @@ const client = new eureka({
 //   console.log("allInstancesWithDetails", allInstancesWithDetails);
 // }
 
-// async function fetchEurekaInstances() {
-//   try {
-//     const response = await axios.get(
-//       "http://localhost:8761/eureka/apps/password-cracker"
-//     );
-//     console.log("Eureka server response:", response.data);
-//   } catch (error) {
-//     console.log("Error fetching instances from Eureka server:", error);
-//   }
-// }
-
-async function initiateElectionProcess() {
-  console.log("waiting for nodes to be discovered on the service registry...");
-
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-  allInstances = client.getInstancesByAppId(`password-cracker`);
-  // console.log("allInstances", allInstances);
-  // @ts-ignore
-  ports = allInstances.map((instance) => instance.port.$);
-  console.log("ports", ports);
-
-  allInstancesWithDetails = await getAllNodesDetails(ports);
-  higherNodes = allInstancesWithDetails.filter(
-    (otherNode) => otherNode.nodeId > node.nodeId
-  );
-  higherPorts = higherNodes.map((node) => node.port);
-
-  masterHasBeenElected = allInstancesWithDetails.some((node) => node.isMaster);
-  isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
-
-  if (!masterHasBeenElected && !isElectionOngoing) {
-    await waitForElection();
-    await startElection(node, higherPorts, ports);
-  }
-}
-
-// async function waitForNodesToStart() {
-//   console.log("waiting for all nodes to start...");
-//   const url = `http://localhost:${port}/actuator/health`;
-
-//   const interval = setInterval(async () => {
-//     try {
-//       const res = await axios.get(url);
-//       if (res.status === 200) {
-//         clearInterval(interval);
-//         console.log(`Node on port ${port} is up`);
-//         const instances = client.getInstancesByAppId("password-cracker");
-//         // @ts-ignore
-//         ports = [...ports, instances.map((instance) => instance.port.$)];
-//         console.log(`Ports of instances: ${ports}`);
-//       }
-//     } catch (error) {
-//       console.log(
-//         `Node on port ${port} is not up yet, error: ${error.message}`
-//       );
-//     }
-//   }, 1000);
-// }
-
 client.start(async (error) => {
   if (error) {
     console.log("Error starting the Eureka Client");
@@ -146,8 +87,63 @@ client.start(async (error) => {
   }
   console.log("Eureka Client started successfully");
 
-  await waitForNodesToStart();
-  await initiateElectionProcess();
+  // Wait for a period of time before starting the election process
+  const waitTime = Math.floor(Math.random() * (15000 - 5000) + 5000);
+  console.log(
+    `Waiting for ${
+      waitTime / 1000
+    } seconds before starting nodes discovery on service registry...`
+  );
+  setTimeout(async () => {
+    // Check if an election is ongoing or if a master has already been elected
+    // if (isElectionOngoing || masterHasBeenElected) {
+    //   console.log(
+    //     "An election is already ongoing or a master has already been elected. Exiting 1..."
+    //   );
+    //   return;
+    // }
+
+    // Set a flag to indicate that an election is ongoing
+
+    // Fetch all the instances of the `password-cracker` application from Eureka
+    const allInstances = client.getInstancesByAppId(`password-cracker`);
+    console.log(`allInstances`, allInstances);
+
+    // Get the ports of all the instances of the `password-cracker` application
+    // @ts-ignore
+    ports = allInstances.map((instance) => instance.port.$);
+
+    // Get details of all nodes and filter the higher nodes
+    allInstancesWithDetails = await getAllNodesDetails(ports);
+    higherNodes = allInstancesWithDetails.filter(
+      (otherNode) => otherNode.nodeId > node.nodeId
+    );
+    higherPorts = higherNodes.map((node) => node.port);
+
+    // Check if a master has already been elected or if an election is ongoing
+    masterHasBeenElected = allInstancesWithDetails.some(
+      (node) => node.isMaster
+    );
+    isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
+
+    if (!masterHasBeenElected && !isElectionOngoing) {
+      // Wait for a random amount of time before starting the election
+      const electionWaitTime = Math.floor(
+        Math.random() * (15000 - 5000) + 5000
+      );
+      console.log(
+        `Starting the election in ${electionWaitTime / 1000} seconds!`
+      );
+      setTimeout(async () => {
+        // await waitForElection();
+        await startElection(node, higherPorts, ports);
+      }, electionWaitTime);
+    } else {
+      console.log(
+        "A master has already been elected or an election is ongoing. Exiting 2..."
+      );
+    }
+  }, waitTime);
 });
 
 app.use(bodyParser.json());
@@ -204,11 +200,11 @@ app.post("/master", (req, res) => {
   node.isElectionOngoing = false;
   if (masterId > node.masterNodeId) {
     node.isMaster = false;
-    masterHasBeenElected = true;
-    node.masterNodeId = masterId;
   }
+  node.masterNodeId = masterId;
+  masterHasBeenElected = true;
+  console.log("Node status now: ", node);
 
-  console.log("Node status inside announcement: ", node);
   res.status(200).send(`Node ${node.nodeId} accepts the master announcement.`);
 });
 
@@ -235,7 +231,7 @@ function gracefulShutdown() {
   });
 }
 
-console.log("Node status after announcement: ", node);
+// console.log("Node status after announcement: ", node);
 
 // Handle various exit signals
 process.on("SIGINT", gracefulShutdown);

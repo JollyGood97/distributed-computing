@@ -44,7 +44,7 @@ export async function getAllNodesDetails(portsList) {
       console.log("error fetching node details: ", error);
     }
   }
-  console.log("nodesDetails ", nodesDetails);
+  // console.log("nodesDetails ", nodesDetails);
   return nodesDetails;
 }
 
@@ -96,7 +96,6 @@ export async function becomemaster(node, otherPorts) {
   node.isMaster = true;
   node.isElectionOngoing = false;
   console.log(`Node ${node.nodeId} wants to be the master!`);
-  console.log("master", node);
 
   // Add a random delay between 100ms and 1000ms
   // const delay = Math.floor(Math.random() * (5000 - 1000) + 1000);
@@ -105,7 +104,9 @@ export async function becomemaster(node, otherPorts) {
   // await new Promise((resolve) => setTimeout(resolve, delay));
 
   let allPorts = otherPorts || [];
-  // allPorts.push(ownPort);
+  // if (allPorts?.length == 0) {
+  //   allPorts.push(ownPort);
+  // }
 
   const masterPromises = allPorts.map(async (port) => {
     try {
