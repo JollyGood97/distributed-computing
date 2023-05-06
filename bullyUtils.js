@@ -55,6 +55,10 @@ export function onMasterAnnouncementReceived() {
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
   console.log("Inside start election. Higher ports: ", higherPorts);
+  if (node.isMasterId !== null && node.isMasterId > node.nodeId) {
+    console.log("Terminating election as master is already announced. ");
+    return;
+  }
   console.log("Inside start election. allPorts inc myself: ", allPorts);
   const electionPromises = higherPorts.map(async (port) => {
     try {
@@ -63,6 +67,7 @@ export async function startElection(node, higherPorts, allPorts) {
           `http://localhost:${port}/proxy/${port}/election`,
           { port: ownPort }
         );
+        // console.log("electionpromises response", response)
         if (response.status === 200) {
           return true;
         }
@@ -78,7 +83,12 @@ export async function startElection(node, higherPorts, allPorts) {
     console.log("electionResults", electionResults);
     const successfulElections = electionResults.filter((result) => result);
     console.log("successfulElections", successfulElections);
+    if (node.isMasterId !== null && node.isMasterId > node.nodeId) {
+      console.log("Terminating election as master is already announced. ");
+      return;
+    }
     if (successfulElections.length === 0 && !receivedMasterAnnouncement) {
+      // if (successfulElections.length === 0) {
       await becomemaster(node, allPorts);
     } else {
       node.isElectionOngoing = false;

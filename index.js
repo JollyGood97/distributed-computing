@@ -158,7 +158,10 @@ app.get("/node", (req, res) => res.json(node));
 app.post("/election", async (req, res) => {
   const { port } = req.body;
   console.log(`Node ${node.nodeId} received an election request.`);
-
+  console.log(
+    "At the time of receiving an election request, my details are: " +
+      JSON.stringify(node)
+  );
   // Check if the current node is already a master
   if (node.isMaster) {
     console.log(
@@ -178,33 +181,45 @@ app.post("/election", async (req, res) => {
     // return;
   }
 
-  res
-    .status(200)
-    .send(
-      "Acknowledged, I will start an election if I am not already in the election."
-    );
   if (!node.isElectionOngoing) {
     try {
+      res.status(200).send("Acknowledged, I will start an election.");
       await startElection(node, higherPorts, ports);
     } catch (error) {
       console.error("Error starting the election:", error);
     }
+  } else {
+    res.status(200).send("Acknowledged, I have already started the election.");
   }
 });
 
 app.post("/master", (req, res) => {
+  onMasterAnnouncementReceived();
   const { masterId } = req.body;
-  console.log(
-    `Node ID ${node.nodeId} says that Master announcement has been made. Master node ID is : ${masterId} and the ultimate bully.`
-  );
+
   node.isElectionOngoing = false;
-  if (masterId > node.masterNodeId) {
-    node.isMaster = false;
+  if (node.masterNodeId > masterId) {
+    console.log(
+      `Node ID ${node.nodeId} says that master is already decided. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
+    );
+    res
+      .status(200)
+      .send(`Node ${node.nodeId} rejects the master announcement.`);
+    return;
   }
-  node.masterNodeId = masterId;
+  if (masterId > node.nodeId) {
+    node.isMaster = false;
+    node.masterNodeId = masterId;
+  } else {
+    node.isMaster = true;
+    node.masterNodeId = node.nodeId;
+  }
   masterHasBeenElected = true;
   console.log("Node status now: ", node);
 
+  console.log(
+    `Node ID ${node.nodeId} says that Master announcement has been made. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
+  );
   res.status(200).send(`Node ${node.nodeId} accepts the master announcement.`);
 });
 
