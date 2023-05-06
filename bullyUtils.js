@@ -54,48 +54,51 @@ export function onMasterAnnouncementReceived() {
 
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
-  console.log("Inside start election. Higher ports: ", higherPorts);
-  if (node.isMasterId !== null && node.isMasterId > node.nodeId) {
-    console.log("Terminating election as master is already announced. ");
+  // console.log("Inside start election. Higher ports: ", higherPorts);
+  if (receivedMasterAnnouncement) {
+    node.isElectionOngoing = false;
+    // console.log(
+    //   `Node ${node.nodeId} says, "Master announcement has been received, terminating the election which I started."`
+    // );
     return;
   }
-  console.log("Inside start election. allPorts inc myself: ", allPorts);
+  // console.log("Inside start election. allPorts inc myself: ", allPorts);
   const electionPromises = higherPorts.map(async (port) => {
     try {
-      await lock.acquire("postElection", async () => {
+      const result = await lock.acquire("postElection", async () => {
         const response = await axios.post(
           `http://localhost:${port}/proxy/${port}/election`,
           { port: ownPort }
         );
-        // console.log("electionpromises response", response)
+        console.log("electionpromises response", response?.status);
         if (response.status === 200) {
           return true;
+        } else {
+          return false;
         }
       });
+      return result;
     } catch (error) {
       console.error("Error in election request:", error);
+      return false;
     }
-    return false;
   });
 
   try {
     const electionResults = await Promise.all(electionPromises);
-    console.log("electionResults", electionResults);
+    // console.log("electionResults", electionResults);
     const successfulElections = electionResults.filter((result) => result);
-    console.log("successfulElections", successfulElections);
-    if (node.isMasterId !== null && node.isMasterId > node.nodeId) {
-      console.log("Terminating election as master is already announced. ");
-      return;
-    }
+    // console.log("successfulElections", successfulElections);
+
     if (successfulElections.length === 0 && !receivedMasterAnnouncement) {
       // if (successfulElections.length === 0) {
       await becomemaster(node, allPorts);
     } else {
       node.isElectionOngoing = false;
       console.log(
-        "Received Election Msg from a higher node or master announcement, waiting for a master to be elected. Removing myself from the election."
+        "Received Election Response OK from a higher node. Removing myself from the election."
       );
-      await checkForMaster(node, allPorts);
+      // await checkForMaster(node, allPorts);
     }
   } catch (error) {
     console.error("Error in election promises:", error);

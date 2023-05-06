@@ -241,23 +241,25 @@ app.get("/node", (req, res) => res.json(node));
 app.post("/election", async (req, res) => {
   const { port } = req.body;
   console.log(`Node ${node.nodeId} received an election request.`);
-  console.log(
-    "At the time of receiving an election request, my details are: " +
-      JSON.stringify(node)
-  );
+  // console.log(
+  //   "At the time of receiving an election request, my details are: " +
+  //     JSON.stringify(node)
+  // );
   // Check if the current node is already a master
   if (node.isMaster) {
     console.log(
       `Node ${node.nodeId} is already a master, ignoring the election request.`
     );
-    axios
-      .post(`http://localhost:${port}/master`, { masterId: node.nodeId })
-      .then((response) => {
-        console.log(response.data);
-      })
-      .catch((error) => {
-        console.log(error);
-      });
+
+    // UNCOMMENT IF NOT WORKING
+    // axios
+    //   .post(`http://localhost:${port}/master`, { masterId: node.nodeId })
+    //   .then((response) => {
+    //     console.log(response.data);
+    //   })
+    //   .catch((error) => {
+    //     console.log(error);
+    //   });
     res.status(200).send("I am already the master.");
     return;
 
@@ -285,9 +287,7 @@ app.post("/master", (req, res) => {
     console.log(
       `Node ID ${node.nodeId} says that master is already decided. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
     );
-    res
-      .status(200)
-      .send(`Node ${node.nodeId} rejects the master announcement.`);
+    res.status(200);
     return;
   }
   if (masterId > node.nodeId) {
