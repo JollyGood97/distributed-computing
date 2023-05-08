@@ -1,6 +1,8 @@
 import express from "express";
 import actuator from "express-actuator";
 import Consul from "consul";
+import events from "events";
+const eventEmitter = new events.EventEmitter();
 
 import { node } from "./NodeInstance.js";
 import * as dotenv from "dotenv";
@@ -16,6 +18,13 @@ import {
 import axios from "axios";
 import sidecarProxy from "./sidecarProxy.js";
 import bodyParser from "body-parser";
+import {
+  divideWorkload,
+  readPasswordFile,
+  sendCompletionMessage,
+} from "./masterUtils.js";
+import { sendWorkload } from "./masterUtils.js";
+import { sendPasswordToMaster } from "./slaveUtils.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -31,58 +40,10 @@ let higherNodes = [];
 let ports = [];
 let higherPorts = [];
 let masterId = null;
+let allNodes = null;
 
 const consul = new Consul();
 const serviceName = "password-cracker";
-
-// Register with Eureka Server
-// const client = new eureka({
-//   instance: {
-//     instanceId: node.nodeId,
-//     app: "password-cracker",
-//     hostName: `localhost:${port}`,
-//     ipAddr: "127.0.0.1",
-//     statusPageUrl: `http://localhost:${process.env.PORT}/actuator/info`,
-//     healthCheckUrl: `http://localhost:${process.env.PORT}/actuator/health`,
-//     vipAddress: `password-cracker-${port}.com`,
-//     dataCenterInfo: {
-//       name: "MyOwn",
-//       "@class": "com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo",
-//     },
-//     port: {
-//       $: Number(port),
-//       "@enabled": true,
-//     },
-
-//     // leaseInfo: {
-//     //   renewalIntervalInSecs: 5,
-//     //   durationInSecs: 5,
-//     //   registrationTimestamp: parseInt(Date()),
-//     // },
-//   },
-//   eureka: {
-//     registryFetchInterval: 100,
-//     fetchRegistry: true,
-//     fetchMetadata: true,
-//     host: "localhost",
-//     port: 8761,
-//     servicePath: "/eureka/apps/",
-//     // heartbeatInterval: 1000,
-//   },
-// });
-
-// async function updateInstances() {
-//   allInstances = client.getInstancesByAppId("password-cracker");
-//   // @ts-ignore
-//   ports = allInstances.map((instance) => instance.port.$);
-//   allInstancesWithDetails = await getAllNodesDetails(ports);
-//   higherNodes = allInstancesWithDetails.filter(
-//     (otherNode) => otherNode.nodeId > node.nodeId
-//   );
-//   higherPorts = higherNodes.map((node) => node.port);
-
-//   console.log("allInstancesWithDetails", allInstancesWithDetails);
-// }
 
 consul.agent.service.register(
   {
@@ -123,7 +84,7 @@ const getServiceNodes = async () => {
 
 const startFirstPhase = async () => {
   try {
-    const allInstances = await getServiceNodes();
+    allInstances = await getServiceNodes();
 
     console.log(`allInstances`, allInstances);
 
@@ -154,7 +115,6 @@ const startFirstPhase = async () => {
         `Starting the election in ${electionWaitTime / 1000} seconds!`
       );
       setTimeout(async () => {
-        // await waitForElection();
         await startElection(node, higherPorts, ports);
       }, electionWaitTime);
     }
@@ -164,70 +124,67 @@ const startFirstPhase = async () => {
   }
 };
 
-console.log("wait 5 seconds to discover all instances");
+let shouldStop = false;
+const passwords = readPasswordFile("passwords.txt");
+let currentPasswordIndex = 0;
+console.log("Passwords list from file", passwords);
+let solverNodeId = null;
+
+const startMasterPhase = async () => {
+  try {
+    // const allInstances = await getServiceNodes();
+    // const ports = Object.values(allInstances).map((instance) => instance.Port);
+    shouldStop = false;
+    allNodes = await getAllNodesDetails(ports);
+
+    // Divide the workload among slave nodes. call again in divideWorkload call
+    const slaveNodes = allNodes.filter((n) => !n.isMaster);
+
+    // Divide the workload among nodes
+    const workload = divideWorkload(slaveNodes);
+    console.log("Start round ", currentPasswordIndex);
+
+    // Send the assigned workload to each node
+    const workloadPromises = [];
+    for (const nodeId in workload) {
+      const assignedRange = workload[nodeId];
+      const targetPort = slaveNodes.find(
+        (node) => node.nodeId === parseInt(nodeId)
+      ).port;
+
+      workloadPromises.push(
+        sendWorkload(
+          targetPort,
+          assignedRange,
+          currentPasswordIndex,
+          shouldStop
+        )
+      );
+    }
+
+    await Promise.all(workloadPromises);
+  } catch (err) {
+    console.log("Error fetching service instances from Consul");
+    console.log(err);
+  }
+};
+
+console.log("wait 3 seconds to discover all instances");
 setTimeout(() => {
   startFirstPhase();
-}, 5000);
+}, 3000);
 
-// client.start(async (error) => {
-//   if (error) {
-//     console.log("Error starting the Eureka Client");
-//     console.log(error);
-//     return;
-//   }
-//   console.log("Eureka Client started successfully");
-
-//   setTimeout(async () => {
-//     // Check if an election is ongoing or if a master has already been elected
-//     // if (isElectionOngoing || masterHasBeenElected) {
-//     //   console.log(
-//     //     "An election is already ongoing or a master has already been elected. Exiting 1..."
-//     //   );
-//     //   return;
-//     // }
-
-//     // Set a flag to indicate that an election is ongoing
-
-//     // Fetch all the instances of the `password-cracker` application from Eureka
-//     const allInstances = client.getInstancesByAppId(`password-cracker`);
-//     console.log(`allInstances`, allInstances);
-
-//     // Get the ports of all the instances of the `password-cracker` application
-//     // @ts-ignore
-//     ports = allInstances.map((instance) => instance.port.$);
-
-//     // Get details of all nodes and filter the higher nodes
-//     allInstancesWithDetails = await getAllNodesDetails(ports);
-//     higherNodes = allInstancesWithDetails.filter(
-//       (otherNode) => otherNode.nodeId > node.nodeId
-//     );
-//     higherPorts = higherNodes.map((node) => node.port);
-
-//     // Check if a master has already been elected or if an election is ongoing
-//     masterHasBeenElected = allInstancesWithDetails.some(
-//       (node) => node.isMaster
-//     );
-//     isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
-
-//     if (!masterHasBeenElected && !isElectionOngoing) {
-//       // Wait for a random amount of time before starting the election
-//       const electionWaitTime = Math.floor(
-//         Math.random() * (15000 - 5000) + 5000
-//       );
-//       console.log(
-//         `Starting the election in ${electionWaitTime / 1000} seconds!`
-//       );
-//       setTimeout(async () => {
-//         // await waitForElection();
-//         await startElection(node, higherPorts, ports);
-//       }, electionWaitTime);
-//     } else {
-//       console.log(
-//         "A master has already been elected or an election is ongoing. Exiting 2..."
-//       );
-//     }
-//   }, waitTime);
-// });
+eventEmitter.on("masterAnnounced", async () => {
+  console.log("After election only this code runs.");
+  console.log(JSON.stringify(node));
+  if (node.isMaster) {
+    console.log("Node is master, starting master phase.");
+    await startMasterPhase();
+  } else {
+    console.log("Node is slave, starting slave phase.");
+    // await startSlavePhase();
+  }
+});
 
 app.use(bodyParser.json());
 // Routes
@@ -282,7 +239,6 @@ app.post("/master", (req, res) => {
   onMasterAnnouncementReceived();
   const { masterId } = req.body;
 
-  node.isElectionOngoing = false;
   if (node.masterNodeId > masterId) {
     console.log(
       `Node ID ${node.nodeId} says that master is already decided. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
@@ -299,11 +255,91 @@ app.post("/master", (req, res) => {
   }
   masterHasBeenElected = true;
   console.log("Node status now: ", node);
-
+  node.isElectionOngoing = false;
   console.log(
     `Node ID ${node.nodeId} says that Master announcement has been made. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
   );
   res.status(200).send(`Node ${node.nodeId} accepts the master announcement.`);
+  eventEmitter.emit("masterAnnounced");
+});
+
+function* getPasswordCombinations(range, length, prefix = "") {
+  if (length === 0) {
+    yield prefix;
+    return;
+  }
+
+  for (const char of range) {
+    yield* getPasswordCombinations(range, length - 1, prefix + char);
+  }
+}
+
+app.post("/workload", async (req, res) => {
+  const assignedRange = req.body.range;
+  const round = req.body.round;
+
+  console.log(`Received workload for pwd line ${round}`);
+
+  const allInstances = await getServiceNodes();
+  const ports = Object.values(allInstances).map((instance) => instance.Port);
+  const allNodes = await getAllNodesDetails(ports);
+  // console.log(`Received allNodes: ${JSON.stringify(allNodes)}`);
+
+  const masterPort = allNodes.find((n) => n.nodeId === node.masterNodeId).port;
+  console.log("Pwd cracked status stop", shouldStop);
+
+  // Start processing the workload
+  for (const password of getPasswordCombinations(assignedRange, 6)) {
+    if (shouldStop) {
+      break;
+    }
+    await sendPasswordToMaster(masterPort, password, node.nodeId);
+  }
+
+  res.sendStatus(200);
+});
+
+app.post("/update-stop", (req, res) => {
+  const stop = req.body.stop;
+  shouldStop = stop;
+  console.log("Updated shouldStop status: ", shouldStop);
+  res.sendStatus(200);
+});
+
+app.post("/completion", (req, res) => {
+  const message = req.body.message;
+  console.log("message", message);
+  if (message === "passwordMatch" || message === "nextPassword") {
+    shouldStop = true;
+  }
+  console.log("Password has been cracked, waiting for next schedule.");
+  res.sendStatus(200);
+});
+
+app.post("/verify", async (req, res) => {
+  let passwordMatch = false;
+
+  const receivedPassword = req.body.password;
+  const nodeId = req.body.nodeId;
+  // console.log(passwords[currentPasswordIndex] + ": " + receivedPassword);
+  if (receivedPassword === passwords[currentPasswordIndex]) {
+    passwordMatch = true;
+    solverNodeId = nodeId;
+    console.log(`Password match found by node ${nodeId}: ${receivedPassword}`);
+  }
+
+  if (passwordMatch) {
+    await sendCompletionMessage(allNodes, true);
+    currentPasswordIndex++;
+
+    if (currentPasswordIndex < passwords.length) {
+      // Send the workload for the next password
+      console.log("Starting next pwd", passwords[currentPasswordIndex]);
+      await startMasterPhase();
+    }
+  }
+
+  res.json({ match: passwordMatch });
 });
 
 // Start the Node
