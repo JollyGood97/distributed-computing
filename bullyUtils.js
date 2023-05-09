@@ -33,20 +33,43 @@ export function waitForElection() {
 }
 
 export async function getAllNodesDetails(portsList) {
-  const nodesDetails = [];
-  for (const port of portsList) {
+  const requestTimeout = 4000;
+
+  const nodesDetailsPromises = portsList.map(async (port) => {
     const url = `http://localhost:${port}/proxy/${port}/node`;
     try {
-      const response = await axios.get(url);
-      // console.log("response ", response.data);
-      nodesDetails.push(response.data);
+      const response = await axios.get(url, { timeout: requestTimeout });
+      return response.data;
     } catch (error) {
-      console.log("error fetching node details: ", error);
+      console.log("error fetching node details for port", port, ":", error);
+      return null;
     }
-  }
-  // console.log("nodesDetails ", nodesDetails);
+  });
+
+  const results = await Promise.all(nodesDetailsPromises);
+  const nodesDetails = results.filter((result) => result !== null);
+
   return nodesDetails;
 }
+
+// export async function getAllNodesDetails(portsList) {
+//   console.log("hello??");
+//   const nodesDetails = [];
+//   for (const port of portsList) {
+//     const url = `http://localhost:${port}/proxy/${port}/node`;
+//     try {
+//       const response = await axios.get(url);
+//       console.log("response ", response.data);
+//       nodesDetails.push(response.data);
+//     } catch (error) {
+//       console.log("error fetching node details: ", error);
+//     }
+//     console.log("wtf ", portsList, port);
+//   }
+//   console.log("nodesDetails ", nodesDetails);
+
+//   return nodesDetails;
+// }
 
 export function onMasterAnnouncementReceived() {
   receivedMasterAnnouncement = true;

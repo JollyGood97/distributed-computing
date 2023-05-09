@@ -82,6 +82,53 @@ const getServiceNodes = async () => {
   return services;
 };
 
+async function isNodeDown(serviceId) {
+  try {
+    const response = await axios.get(
+      `http://127.0.0.1:8500/v1/agent/health/service/id/${serviceId}?format=text`
+    );
+    const healthStatus = response.data;
+
+    return healthStatus === "critical";
+  } catch (error) {
+    if (
+      error.response &&
+      error.response.status === 503 &&
+      error.response.data === "critical"
+    ) {
+      return true;
+    }
+    console.error(`Error checking node status: ${error.message}`);
+    return false;
+  }
+}
+
+const getActiveNodes = async (nodes) => {
+  const activeNodes = [];
+  for (const serviceId in nodes) {
+    const node = nodes[serviceId];
+    if (await isNodeDown(serviceId)) {
+      console.log(`Node with service ID ${serviceId} is down.`);
+    } else {
+      activeNodes.push(node);
+    }
+  }
+  return activeNodes;
+};
+
+const monitorMasterNode = async (masterServiceId) => {
+  const checkInterval = 5000;
+
+  setInterval(async () => {
+    if (await isNodeDown(masterServiceId)) {
+      console.log(
+        `Master node ${masterServiceId} is down. Starting a new election.`
+      );
+      startFirstPhase();
+    }
+  }, checkInterval);
+};
+
 const startFirstPhase = async () => {
   try {
     allInstances = await getServiceNodes();
@@ -95,6 +142,8 @@ const startFirstPhase = async () => {
 
     // Get details of all nodes and filter the higher nodes
     allInstancesWithDetails = await getAllNodesDetails(ports);
+    console.log("nodewithdetails0", JSON.stringify(allInstancesWithDetails));
+
     higherNodes = allInstancesWithDetails.filter(
       (otherNode) => otherNode.nodeId > node.nodeId
     );
@@ -117,6 +166,10 @@ const startFirstPhase = async () => {
       setTimeout(async () => {
         await startElection(node, higherPorts, ports);
       }, electionWaitTime);
+    } else {
+      console.log("Master has already been elected", isElectionOngoing);
+      console.log("masterHasBeenElected", masterHasBeenElected);
+      console.log("nodewithdetails1", JSON.stringify(allInstancesWithDetails));
     }
   } catch (err) {
     console.log("Error fetching service instances from Consul");
@@ -132,10 +185,16 @@ let solverNodeId = null;
 
 const startMasterPhase = async () => {
   try {
-    // const allInstances = await getServiceNodes();
-    // const ports = Object.values(allInstances).map((instance) => instance.Port);
+    let latestInstances = await getServiceNodes();
+
+    // Filter only active nodes
+    latestInstances = await getActiveNodes(latestInstances);
+
+    const latestPorts = Object.values(latestInstances).map(
+      (instance) => instance.Port
+    );
     shouldStop = false;
-    allNodes = await getAllNodesDetails(ports);
+    allNodes = await getAllNodesDetails(latestPorts);
 
     // Divide the workload among slave nodes. call again in divideWorkload call
     const slaveNodes = allNodes.filter((n) => !n.isMaster);
@@ -178,10 +237,10 @@ eventEmitter.on("masterAnnounced", async () => {
   console.log("After election only this code runs.");
   console.log(JSON.stringify(node));
   if (node.isMaster) {
-    console.log("Node is master, starting master phase.");
+    console.log("Node is master, starting master tasks.");
     await startMasterPhase();
   } else {
-    console.log("Node is slave, starting slave phase.");
+    console.log("Node is slave, waiting for slave tasks.");
     // await startSlavePhase();
   }
 });
@@ -281,12 +340,14 @@ app.post("/workload", async (req, res) => {
   console.log(`Received workload for pwd line ${round}`);
 
   const allInstances = await getServiceNodes();
+  // Filter only active nodes
+  //  latestInstances = await getActiveNodes(latestInstances);
+
   const ports = Object.values(allInstances).map((instance) => instance.Port);
   const allNodes = await getAllNodesDetails(ports);
   // console.log(`Received allNodes: ${JSON.stringify(allNodes)}`);
 
   const masterPort = allNodes.find((n) => n.nodeId === node.masterNodeId).port;
-  console.log("Pwd cracked status stop", shouldStop);
 
   // Start processing the workload
   for (const password of getPasswordCombinations(assignedRange, 6)) {
@@ -312,7 +373,15 @@ app.post("/completion", (req, res) => {
   if (message === "passwordMatch" || message === "nextPassword") {
     shouldStop = true;
   }
+
   console.log("Password has been cracked, waiting for next schedule.");
+  res.sendStatus(200);
+});
+
+app.post("/end", (req, res) => {
+  console.log(
+    "All passwords in the file have been cracked. Bye, have a nice day!"
+  );
   res.sendStatus(200);
 });
 
@@ -336,6 +405,10 @@ app.post("/verify", async (req, res) => {
       // Send the workload for the next password
       console.log("Starting next pwd", passwords[currentPasswordIndex]);
       await startMasterPhase();
+    } else {
+      for (const node of allNodes) {
+        await axios.post(`http://localhost:${node.port}/end`);
+      }
     }
   }
 

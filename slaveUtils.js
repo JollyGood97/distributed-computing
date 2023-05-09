@@ -9,7 +9,7 @@ export const sendPasswordToMaster = async (masterPort, password, nodeId) => {
     });
     console.log(nodeId + ": " + password);
     if (response.data.match) {
-      console.log(`Password match found inside SPTM: ${password}`);
+      // console.log(`Password match found inside SPTM: ${password}`);
       return;
     }
   } catch (error) {
