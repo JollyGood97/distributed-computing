@@ -69,14 +69,6 @@ consul.agent.service.register(
   }
 );
 
-// Wait for a period of time before starting the election process
-// const waitTime = Math.floor(Math.random() * (15000 - 5000) + 5000);
-// console.log(
-//   `Waiting for ${
-//     waitTime / 1000
-//   } seconds before starting nodes discovery on service registry...`
-// );
-
 const getServiceNodes = async () => {
   const services = await consul.agent.service.list();
   return services;
@@ -88,7 +80,7 @@ async function isNodeDown(serviceId) {
       `http://127.0.0.1:8500/v1/agent/health/service/id/${serviceId}?format=text`
     );
     const healthStatus = response.data;
-
+    console.log("health status: " + healthStatus);
     return healthStatus === "critical";
   } catch (error) {
     if (
@@ -96,10 +88,19 @@ async function isNodeDown(serviceId) {
       error.response.status === 503 &&
       error.response.data === "critical"
     ) {
+      console.log(
+        "health status error response: " +
+          JSON.stringify(error.response.data) +
+          serviceId
+      );
       return true;
     }
-    console.error(`Error checking node status: ${error.message}`);
-    return false;
+    console.error(
+      `Error checking node status: ${error.message}`,
+      JSON.stringify(error)
+    );
+    // return false;
+    return true;
   }
 }
 
@@ -233,8 +234,9 @@ setTimeout(() => {
   startFirstPhase();
 }, 3000);
 
-eventEmitter.on("masterAnnounced", async () => {
-  console.log("After election only this code runs.");
+let jobDone = false;
+eventEmitter.on("masterAnnounced", async (masterNodeId) => {
+  // console.log("After election only this code runs.");
   console.log(JSON.stringify(node));
   if (node.isMaster) {
     console.log("Node is master, starting master tasks.");
@@ -242,6 +244,9 @@ eventEmitter.on("masterAnnounced", async () => {
   } else {
     console.log("Node is slave, waiting for slave tasks.");
     // await startSlavePhase();
+  }
+  if (masterNodeId !== node.masterNodeId && jobDone === false) {
+    monitorMasterNode(masterNodeId);
   }
 });
 
@@ -319,7 +324,7 @@ app.post("/master", (req, res) => {
     `Node ID ${node.nodeId} says that Master announcement has been made. Master node ID is : ${node.masterNodeId} and the ultimate bully.`
   );
   res.status(200).send(`Node ${node.nodeId} accepts the master announcement.`);
-  eventEmitter.emit("masterAnnounced");
+  eventEmitter.emit("masterAnnounced", node.masterNodeId);
 });
 
 function* getPasswordCombinations(range, length, prefix = "") {
@@ -334,10 +339,15 @@ function* getPasswordCombinations(range, length, prefix = "") {
 }
 
 app.post("/workload", async (req, res) => {
+  res.sendStatus(200);
+
   const assignedRange = req.body.range;
   const round = req.body.round;
+  const port = req.body.port;
 
-  console.log(`Received workload for pwd line ${round}`);
+  console.log(
+    `Node on port ${port} says, "Received workload for pwd line ${round}"`
+  );
 
   const allInstances = await getServiceNodes();
   // Filter only active nodes
@@ -354,10 +364,14 @@ app.post("/workload", async (req, res) => {
     if (shouldStop) {
       break;
     }
+    // if (await isNodeDown(masterServiceId)) {
+    //   console.log(
+    //     `Master node ${masterServiceId} is down. Starting a new election.`
+    //   );
+    //   startFirstPhase();
+    // }
     await sendPasswordToMaster(masterPort, password, node.nodeId);
   }
-
-  res.sendStatus(200);
 });
 
 app.post("/update-stop", (req, res) => {
@@ -379,6 +393,7 @@ app.post("/completion", (req, res) => {
 });
 
 app.post("/end", (req, res) => {
+  jobDone = true;
   console.log(
     "All passwords in the file have been cracked. Bye, have a nice day!"
   );
