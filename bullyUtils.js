@@ -36,7 +36,7 @@ export async function getAllNodesDetails(portsList) {
   const requestTimeout = 4000;
 
   const nodesDetailsPromises = portsList.map(async (port) => {
-    const url = `http://localhost:${port}/proxy/${port}/node`;
+    const url = `http://localhost:5000/proxy/${port}/node`;
     try {
       const response = await axios.get(url, { timeout: requestTimeout });
       return response.data;
@@ -62,20 +62,19 @@ export function resetMasterAnnouncement() {
 
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
-  // console.log("Inside start election. Higher ports: ", higherPorts);
   if (receivedMasterAnnouncement) {
     node.isElectionOngoing = false;
     return;
   }
-  // console.log("Inside start election. allPorts inc myself: ", allPorts);
+
   const electionPromises = higherPorts.map(async (port) => {
     try {
       const result = await lock.acquire("postElection", async () => {
         const response = await axios.post(
-          `http://localhost:${port}/proxy/${port}/election`,
+          `http://localhost:5000/proxy/${port}/election`,
           { port: ownPort }
         );
-        // console.log("electionpromises response", response?.status);
+
         if (response.status === 200) {
           return true;
         } else {
@@ -91,9 +90,7 @@ export async function startElection(node, higherPorts, allPorts) {
 
   try {
     const electionResults = await Promise.all(electionPromises);
-    // console.log("electionResults", electionResults);
     const successfulElections = electionResults.filter((result) => result);
-    // console.log("successfulElections", successfulElections);
 
     if (successfulElections.length === 0 && !receivedMasterAnnouncement) {
       await becomemaster(node, allPorts);
@@ -116,34 +113,16 @@ export async function becomemaster(node, otherPorts) {
 
   const masterPromises = allPorts.map(async (port) => {
     try {
-      await axios.post(`http://localhost:${port}/proxy/${port}/master`, {
+      await axios.post(`http://localhost:5000/proxy/${port}/master`, {
         masterId: node.nodeId,
       });
-      await axios.post(`http://localhost:${port}/master-announcement-received`);
+      await axios.post(
+        `http://localhost:5000/proxy/${port}/master-announcement-received`
+      );
     } catch (error) {
       console.error("Error in master announcement:", error);
     }
   });
 
   await Promise.all(masterPromises);
-}
-
-export async function checkForMaster(node, allPorts) {
-  while (!node.masterNodeId) {
-    console.log(`Node ${node.nodeId} is checking for master.`);
-    const nodesDetails = await getAllNodesDetails(allPorts);
-    const masterNode = nodesDetails.find((node) => node.isMaster);
-    const allElectionsFinished = nodesDetails.every(
-      (otherNode) =>
-        !otherNode.isElectionOngoing || otherNode.nodeId === node.nodeId
-    );
-
-    if (masterNode && allElectionsFinished) {
-      node.masterNodeId = masterNode.nodeId;
-      console.log(`Node ${node.nodeId} found master: ${masterNode.nodeId}`);
-      node.isElectionOngoing = false;
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
 }

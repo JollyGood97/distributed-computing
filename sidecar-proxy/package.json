@@ -1,0 +1,26 @@
+{
+  "name": "sidecar-proxy",
+  "version": "1.0.0",
+  "description": "Sidecar proxy pattern",
+  "main": "sidecar.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JollyGood97/distributed-computing.git"
+  },
+  "keywords": [
+    "sidecar"
+  ],
+  "author": "Perera J.A.S.D",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JollyGood97/distributed-computing/issues"
+  },
+  "homepage": "https://github.com/JollyGood97/distributed-computing#readme",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "express": "^4.18.2"
+  }
+}

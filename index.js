@@ -370,7 +370,7 @@ app.post("/workload", async (req, res) => {
 app.post("/update-stop", (req, res) => {
   const stop = req.body.stop;
   shouldStop = stop;
-  console.log("Updated shouldStop status: ", shouldStop);
+  console.log("Updated stop and wait status: ", shouldStop);
   res.sendStatus(200);
 });
 
@@ -388,7 +388,7 @@ app.post("/completion", (req, res) => {
 app.post("/end", (req, res) => {
   jobDone = true;
   console.log(
-    "All passwords in the file have been cracked. Bye, have a nice day!"
+    "All passwords in the file have been cracked. Bye Mr Lasitha, have a nice day!"
   );
   res.sendStatus(200);
 });
