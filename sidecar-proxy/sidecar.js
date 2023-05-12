@@ -3,6 +3,8 @@ import axios from "axios";
 
 const sidecarProxy = express();
 
+sidecarProxy.use(express.json());
+
 sidecarProxy.get("/proxy/:port/node", async (req, res) => {
   const targetPort = req.params.port;
   try {
@@ -16,14 +18,11 @@ sidecarProxy.get("/proxy/:port/node", async (req, res) => {
 
 sidecarProxy.post("/proxy/:port/election", async (req, res) => {
   const targetPort = req.params.port;
-  const { port } = req.body;
-
   console.log(`Received election request for port ${targetPort}`);
 
   try {
     const response = await axios.post(
-      `http://localhost:${targetPort}/election`,
-      { port }
+      `http://localhost:${targetPort}/election`
     );
     res.status(response.status).send(response.data);
   } catch (error) {
@@ -70,7 +69,9 @@ sidecarProxy.post(
 sidecarProxy.post("/proxy/:port/update-stop", async (req, res) => {
   const targetPort = req.params.port;
   const { stop } = req.body;
-  console.log("Resetting stop and wait status for slave nodes ...");
+  console.log(
+    "Resetting stop and wait status for slave node on port " + targetPort
+  );
   try {
     const response = await axios.post(
       `http://localhost:${targetPort}/update-stop`,
@@ -116,6 +117,36 @@ sidecarProxy.post("/proxy/:port/completion", async (req, res) => {
   } catch (error) {
     console.error("Error forwarding completion message:", error);
     res.status(500).send("Error forwarding completion message to node");
+  }
+});
+
+sidecarProxy.post("/proxy/:port/verify", async (req, res) => {
+  const targetPort = req.params.port;
+  const { password, nodeId } = req.body;
+
+  try {
+    const response = await axios.post(`http://localhost:${targetPort}/verify`, {
+      password,
+      nodeId,
+    });
+    res.status(response.status).send(response.data);
+  } catch (error) {
+    console.error("Error sending verify request:", error);
+    res.status(500).send("Error forwarding verify request to node");
+  }
+});
+
+sidecarProxy.post("/proxy/:port/end", async (req, res) => {
+  const targetPort = req.params.port;
+  console.log(
+    `Password cracking is finally over slave! ${targetPort}, You are free now!`
+  );
+  try {
+    const response = await axios.post(`http://localhost:${targetPort}/end`);
+    res.status(response.status).send(response.data);
+  } catch (error) {
+    console.error("Error sending end request:", error);
+    res.status(500).send("Error forwarding end request to node");
   }
 });
 

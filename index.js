@@ -143,7 +143,7 @@ const startFirstPhase = async () => {
 
     // Get details of all nodes and filter the higher nodes & ports
     allInstancesWithDetails = await getAllNodesDetails(ports);
-    console.log("nodewithdetails0", JSON.stringify(allInstancesWithDetails));
+    // console.log("nodewithdetails0", JSON.stringify(allInstancesWithDetails));
     higherNodes = allInstancesWithDetails.filter(
       (otherNode) => otherNode.nodeId > node.nodeId
     );
@@ -171,7 +171,7 @@ const startFirstPhase = async () => {
       node.masterNodeId = masterNode.nodeId;
       console.log("Master has already been elected", masterHasBeenElected);
       console.log("isElectionOngoing", isElectionOngoing);
-      console.log("nodewithdetails1", JSON.stringify(allInstancesWithDetails));
+      // console.log("nodewithdetails1", JSON.stringify(allInstancesWithDetails));
     }
   } catch (err) {
     console.log("Error fetching service instances from Consul");
@@ -414,7 +414,7 @@ app.post("/verify", async (req, res) => {
       await startMasterPhase();
     } else {
       for (const node of allNodes) {
-        await axios.post(`http://localhost:${node.port}/end`);
+        await axios.post(`http://localhost:5000/proxy/${node.port}/end`);
       }
     }
   }

@@ -19,5 +19,6 @@ export const sendPasswordToMaster = async (masterPort, password, nodeId) => {
   } catch (error) {
     console.log(`Failed to send password to master node`);
     console.log(error);
+    return;
   }
 };

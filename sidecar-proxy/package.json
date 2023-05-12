@@ -10,6 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/JollyGood97/distributed-computing.git"
   },
+  "type": "module",
   "keywords": [
     "sidecar"
   ],
