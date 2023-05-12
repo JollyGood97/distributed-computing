@@ -75,6 +75,10 @@ export function onMasterAnnouncementReceived() {
   receivedMasterAnnouncement = true;
 }
 
+export function resetMasterAnnouncement() {
+  receivedMasterAnnouncement = false;
+}
+
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
   // console.log("Inside start election. Higher ports: ", higherPorts);

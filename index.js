@@ -11,6 +11,7 @@ import { Eureka as eureka } from "eureka-js-client";
 import {
   getAllNodesDetails,
   onMasterAnnouncementReceived,
+  resetMasterAnnouncement,
   startElection,
   waitForElection,
   waitForNodesToStart,
@@ -80,7 +81,7 @@ async function isNodeDown(serviceId) {
       `http://127.0.0.1:8500/v1/agent/health/service/id/${serviceId}?format=text`
     );
     const healthStatus = response.data;
-    console.log("health status: " + healthStatus);
+    // console.log("health status: " + healthStatus);
     return healthStatus === "critical";
   } catch (error) {
     if (
@@ -95,10 +96,10 @@ async function isNodeDown(serviceId) {
       );
       return true;
     }
-    console.error(
-      `Error checking node status: ${error.message}`,
-      JSON.stringify(error)
-    );
+    // console.error(
+    //   `Error checking node status: ${error.message}`,
+    //   JSON.stringify(error)
+    // );
     // return false;
     return true;
   }
@@ -125,6 +126,10 @@ const monitorMasterNode = async (masterServiceId) => {
       console.log(
         `Master node ${masterServiceId} is down. Starting a new election.`
       );
+      resetMasterAnnouncement();
+      node.masterNodeId = null;
+      node.isMaster = false;
+      node.isElectionOngoing = false;
       startFirstPhase();
     }
   }, checkInterval);
@@ -168,8 +173,12 @@ const startFirstPhase = async () => {
         await startElection(node, higherPorts, ports);
       }, electionWaitTime);
     } else {
-      console.log("Master has already been elected", isElectionOngoing);
-      console.log("masterHasBeenElected", masterHasBeenElected);
+      let masterNode = allInstancesWithDetails.find((node) => node.isMaster);
+      node.isMaster = false;
+      node.isElectionOngoing = false;
+      node.masterNodeId = masterNode.nodeId;
+      console.log("Master has already been elected", masterHasBeenElected);
+      console.log("isElectionOngoing", isElectionOngoing);
       console.log("nodewithdetails1", JSON.stringify(allInstancesWithDetails));
     }
   } catch (err) {
@@ -364,12 +373,18 @@ app.post("/workload", async (req, res) => {
     if (shouldStop) {
       break;
     }
-    // if (await isNodeDown(masterServiceId)) {
-    //   console.log(
-    //     `Master node ${masterServiceId} is down. Starting a new election.`
-    //   );
-    //   startFirstPhase();
-    // }
+    if (await isNodeDown(node.masterNodeId)) {
+      console.log(
+        `Master node ${node.masterNodeId} is down. Starting a new election.`
+      );
+      resetMasterAnnouncement();
+      node.masterNodeId = null;
+      node.isMaster = false;
+      node.isElectionOngoing = false;
+      startFirstPhase();
+      break;
+    }
+
     await sendPasswordToMaster(masterPort, password, node.nodeId);
   }
 });
