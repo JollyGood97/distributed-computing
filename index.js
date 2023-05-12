@@ -7,14 +7,12 @@ const eventEmitter = new events.EventEmitter();
 import { node } from "./NodeInstance.js";
 import * as dotenv from "dotenv";
 dotenv.config();
-import { Eureka as eureka } from "eureka-js-client";
+// import { Eureka as eureka } from "eureka-js-client";
 import {
   getAllNodesDetails,
   onMasterAnnouncementReceived,
   resetMasterAnnouncement,
   startElection,
-  waitForElection,
-  waitForNodesToStart,
 } from "./bullyUtils.js";
 import axios from "axios";
 import sidecarProxy from "./sidecarProxy.js";
@@ -40,7 +38,6 @@ let masterNodeId = null;
 let higherNodes = [];
 let ports = [];
 let higherPorts = [];
-let masterId = null;
 let allNodes = null;
 
 const consul = new Consul();
@@ -65,8 +62,6 @@ consul.agent.service.register(
     } else {
       console.log(err);
     }
-
-    // The rest of your logic goes here
   }
 );
 
@@ -146,23 +141,20 @@ const startFirstPhase = async () => {
     ports = Object.values(allInstances).map((instance) => instance.Port);
     console.log(`ports`, ports);
 
-    // Get details of all nodes and filter the higher nodes
+    // Get details of all nodes and filter the higher nodes & ports
     allInstancesWithDetails = await getAllNodesDetails(ports);
     console.log("nodewithdetails0", JSON.stringify(allInstancesWithDetails));
-
     higherNodes = allInstancesWithDetails.filter(
       (otherNode) => otherNode.nodeId > node.nodeId
     );
     higherPorts = higherNodes.map((node) => node.port);
 
-    // Check if a master has already been elected or if an election is ongoing
     masterHasBeenElected = allInstancesWithDetails.some(
       (node) => node.isMaster
     );
     isElectionOngoing = allInstancesWithDetails.some((node) => node.isElection);
 
     if (!masterHasBeenElected && !isElectionOngoing) {
-      // Wait for a random amount of time before starting the election
       const electionWaitTime = Math.floor(
         Math.random() * (15000 - 5000) + 5000
       );
@@ -191,7 +183,6 @@ let shouldStop = false;
 const passwords = readPasswordFile("passwords.txt");
 let currentPasswordIndex = 0;
 console.log("Passwords list from file", passwords);
-let solverNodeId = null;
 
 const startMasterPhase = async () => {
   try {
@@ -206,10 +197,9 @@ const startMasterPhase = async () => {
     shouldStop = false;
     allNodes = await getAllNodesDetails(latestPorts);
 
-    // Divide the workload among slave nodes. call again in divideWorkload call
+    // Divide the workload among slave nodes.
     const slaveNodes = allNodes.filter((n) => !n.isMaster);
 
-    // Divide the workload among nodes
     const workload = divideWorkload(slaveNodes);
     console.log("Start round ", currentPasswordIndex);
 
@@ -252,7 +242,6 @@ eventEmitter.on("masterAnnounced", async (masterNodeId) => {
     await startMasterPhase();
   } else {
     console.log("Node is slave, waiting for slave tasks.");
-    // await startSlavePhase();
   }
   if (masterNodeId !== node.masterNodeId && jobDone === false) {
     monitorMasterNode(masterNodeId);
@@ -260,6 +249,7 @@ eventEmitter.on("masterAnnounced", async (masterNodeId) => {
 });
 
 app.use(bodyParser.json());
+
 // Routes
 app.post("/master-announcement-received", (req, res) => {
   onMasterAnnouncementReceived();
@@ -269,7 +259,6 @@ app.post("/master-announcement-received", (req, res) => {
 app.get("/node", (req, res) => res.json(node));
 
 app.post("/election", async (req, res) => {
-  const { port } = req.body;
   console.log(`Node ${node.nodeId} received an election request.`);
   // console.log(
   //   "At the time of receiving an election request, my details are: " +
@@ -281,19 +270,8 @@ app.post("/election", async (req, res) => {
       `Node ${node.nodeId} is already a master, ignoring the election request.`
     );
 
-    // UNCOMMENT IF NOT WORKING
-    // axios
-    //   .post(`http://localhost:${port}/master`, { masterId: node.nodeId })
-    //   .then((response) => {
-    //     console.log(response.data);
-    //   })
-    //   .catch((error) => {
-    //     console.log(error);
-    //   });
     res.status(200).send("I am already the master.");
     return;
-
-    // return;
   }
 
   if (!node.isElectionOngoing) {
@@ -423,7 +401,6 @@ app.post("/verify", async (req, res) => {
   // console.log(passwords[currentPasswordIndex] + ": " + receivedPassword);
   if (receivedPassword === passwords[currentPasswordIndex]) {
     passwordMatch = true;
-    solverNodeId = nodeId;
     console.log(`Password match found by node ${nodeId}: ${receivedPassword}`);
   }
 
@@ -470,8 +447,6 @@ async function gracefulShutdown() {
   console.log("Deregistered");
   process.exit();
 }
-
-// console.log("Node status after announcement: ", node);
 
 //Handle various exit signals
 process.on("SIGINT", gracefulShutdown);
