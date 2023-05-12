@@ -5,11 +5,11 @@ const sidecarProxy = express();
 
 sidecarProxy.post("/proxy/:port/election", async (req, res) => {
   const targetPort = req.params.port;
-  const { port } = req.body; // extract the port from the request body
+  const { port } = req.body;
   try {
     const response = await axios.post(
       `http://localhost:${targetPort}/election`,
-      { port } // pass the port to the target node
+      { port }
     );
     res.status(response.status).send(response.data);
   } catch (error) {

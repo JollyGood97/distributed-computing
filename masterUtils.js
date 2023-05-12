@@ -32,6 +32,7 @@ export const sendWorkload = async (
     const response = await axios.post(`http://localhost:${port}/workload`, {
       range: assignedRange,
       round: currentPasswordIndex,
+      port: port,
     });
   } catch (error) {
     console.log(`Failed to send workload to node on port ${port}`);

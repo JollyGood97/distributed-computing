@@ -33,18 +33,22 @@ export function waitForElection() {
 }
 
 export async function getAllNodesDetails(portsList) {
-  const nodesDetails = [];
-  for (const port of portsList) {
+  const requestTimeout = 4000;
+
+  const nodesDetailsPromises = portsList.map(async (port) => {
     const url = `http://localhost:${port}/proxy/${port}/node`;
     try {
-      const response = await axios.get(url);
-      // console.log("response ", response.data);
-      nodesDetails.push(response.data);
+      const response = await axios.get(url, { timeout: requestTimeout });
+      return response.data;
     } catch (error) {
-      console.log("error fetching node details: ", error);
+      console.log("error fetching node details for port", port, ":", error);
+      return null;
     }
-  }
-  // console.log("nodesDetails ", nodesDetails);
+  });
+
+  const results = await Promise.all(nodesDetailsPromises);
+  const nodesDetails = results.filter((result) => result !== null);
+
   return nodesDetails;
 }
 
@@ -52,14 +56,15 @@ export function onMasterAnnouncementReceived() {
   receivedMasterAnnouncement = true;
 }
 
+export function resetMasterAnnouncement() {
+  receivedMasterAnnouncement = false;
+}
+
 export async function startElection(node, higherPorts, allPorts) {
   node.isElectionOngoing = true;
   // console.log("Inside start election. Higher ports: ", higherPorts);
   if (receivedMasterAnnouncement) {
     node.isElectionOngoing = false;
-    // console.log(
-    //   `Node ${node.nodeId} says, "Master announcement has been received, terminating the election which I started."`
-    // );
     return;
   }
   // console.log("Inside start election. allPorts inc myself: ", allPorts);
@@ -70,7 +75,7 @@ export async function startElection(node, higherPorts, allPorts) {
           `http://localhost:${port}/proxy/${port}/election`,
           { port: ownPort }
         );
-        console.log("electionpromises response", response?.status);
+        // console.log("electionpromises response", response?.status);
         if (response.status === 200) {
           return true;
         } else {
@@ -91,14 +96,12 @@ export async function startElection(node, higherPorts, allPorts) {
     // console.log("successfulElections", successfulElections);
 
     if (successfulElections.length === 0 && !receivedMasterAnnouncement) {
-      // if (successfulElections.length === 0) {
       await becomemaster(node, allPorts);
     } else {
       node.isElectionOngoing = false;
       console.log(
         "Received Election Response OK from a higher node. Removing myself from the election."
       );
-      // await checkForMaster(node, allPorts);
     }
   } catch (error) {
     console.error("Error in election promises:", error);
@@ -109,17 +112,7 @@ export async function becomemaster(node, otherPorts) {
   node.isMaster = true;
   node.isElectionOngoing = false;
   console.log(`Node ${node.nodeId} wants to be the master!`);
-
-  // Add a random delay between 100ms and 1000ms
-  // const delay = Math.floor(Math.random() * (5000 - 1000) + 1000);
-
-  // console.log(`Waiting for ${delay} seconds before announcing the master.`);
-  // await new Promise((resolve) => setTimeout(resolve, delay));
-
   let allPorts = otherPorts || [];
-  // if (allPorts?.length == 0) {
-  //   allPorts.push(ownPort);
-  // }
 
   const masterPromises = allPorts.map(async (port) => {
     try {
