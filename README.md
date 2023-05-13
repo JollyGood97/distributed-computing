@@ -19,7 +19,7 @@ This will start the Consul server on your local machine.
 
 (Windows)
 To start the node instances, run the following command and specify the number of instances required:
-./run-nodes.bat 3
+# ./run-nodes.bat 3
 This will spin up 3 instances.
 
 
