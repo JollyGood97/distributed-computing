@@ -5,7 +5,7 @@ This repository contains the main node application code and the sidedcar proxy, 
 
 WARNING: Some codes are only windows compatible.
 
-**GETTING STARTED**
+## GETTING STARTED
 
 To run, install and start Consul on your local machine:
 
@@ -18,7 +18,7 @@ Unzip consul folder and run .exe file:\
 This will start the Consul server on your local machine.
 
 (Windows)
-To start the node instances, run the following command and specify the number of instances required:
+To start the node instances, run the following command and specify the number of instances required:\
  ./run-nodes.bat 3
 This will spin up 3 instances.
 
