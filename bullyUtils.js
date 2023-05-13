@@ -119,7 +119,9 @@ export async function becomemaster(node, otherPorts) {
       await axios.post(`http://localhost:${port}/proxy/${port}/master`, {
         masterId: node.nodeId,
       });
-      await axios.post(`http://localhost:${port}/master-announcement-received`);
+      await axios.post(
+        `http://localhost:${port}/proxy/${port}/master-announcement-received`
+      );
     } catch (error) {
       console.error("Error in master announcement:", error);
     }

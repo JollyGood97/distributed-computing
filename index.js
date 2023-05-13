@@ -276,7 +276,7 @@ app.post("/election", async (req, res) => {
 
   if (!node.isElectionOngoing) {
     try {
-      res.status(200).send("Acknowledged, I will start an election.");
+      res.status(200).send("Acknowledged, I will join the election.");
       await startElection(node, higherPorts, ports);
     } catch (error) {
       console.error("Error starting the election:", error);
@@ -332,10 +332,6 @@ app.post("/workload", async (req, res) => {
   const round = req.body.round;
   const port = req.body.port;
 
-  console.log(
-    `Node on port ${port} says, "Received workload for pwd line ${round}"`
-  );
-
   const allInstances = await getServiceNodes();
   // Filter only active nodes
   //  latestInstances = await getActiveNodes(latestInstances);
@@ -370,18 +366,11 @@ app.post("/workload", async (req, res) => {
 app.post("/update-stop", (req, res) => {
   const stop = req.body.stop;
   shouldStop = stop;
-  console.log("Updated shouldStop status: ", shouldStop);
   res.sendStatus(200);
 });
 
 app.post("/completion", (req, res) => {
-  const message = req.body.message;
-  console.log("message", message);
-  if (message === "passwordMatch" || message === "nextPassword") {
-    shouldStop = true;
-  }
-
-  console.log("Password has been cracked, waiting for next schedule.");
+  shouldStop = true;
   res.sendStatus(200);
 });
 
@@ -401,7 +390,10 @@ app.post("/verify", async (req, res) => {
   // console.log(passwords[currentPasswordIndex] + ": " + receivedPassword);
   if (receivedPassword === passwords[currentPasswordIndex]) {
     passwordMatch = true;
-    console.log(`Password match found by node ${nodeId}: ${receivedPassword}`);
+
+    console.log(
+      `Password match found by node ${nodeId}. Correct Password is: ${receivedPassword}`
+    );
   }
 
   if (passwordMatch) {
@@ -414,7 +406,9 @@ app.post("/verify", async (req, res) => {
       await startMasterPhase();
     } else {
       for (const node of allNodes) {
-        await axios.post(`http://localhost:${node.port}/end`);
+        await axios.post(
+          `http://localhost:${node.port}/proxy/${node.port}/end`
+        );
       }
     }
   }

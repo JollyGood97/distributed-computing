@@ -24,16 +24,19 @@ export const sendWorkload = async (
   currentPasswordIndex,
   shouldStop
 ) => {
-  await axios.post(`http://localhost:${port}/update-stop`, { stop: false });
+  await axios.post(`http://localhost:${port}/proxy/${port}/update-stop`, {
+    stop: false,
+  });
 
   try {
-    console.log("workload sending in round ", currentPasswordIndex);
-    console.log(`Workload sending to node on port ${port}: ${assignedRange}`);
-    const response = await axios.post(`http://localhost:${port}/workload`, {
-      range: assignedRange,
-      round: currentPasswordIndex,
-      port: port,
-    });
+    const response = await axios.post(
+      `http://localhost:${port}/proxy/${port}/workload`,
+      {
+        range: assignedRange,
+        round: currentPasswordIndex,
+        port: port,
+      }
+    );
   } catch (error) {
     console.log(`Failed to send workload to node on port ${port}`);
     console.log(error);
@@ -46,14 +49,11 @@ export const readPasswordFile = (filename) => {
 };
 
 export const sendCompletionMessage = async (nodes, match) => {
-  const message = match ? "passwordMatch" : "nextPassword";
-
   for (const node of nodes) {
     if (!node.isMaster) {
       try {
         const response = await axios.post(
-          `http://localhost:${node.port}/completion`,
-          { message }
+          `http://localhost:${node.port}/proxy/${node.port}/completion`
         );
       } catch (error) {
         console.log(
