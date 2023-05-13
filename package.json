@@ -1,0 +1,46 @@
+{
+  "name": "password-cracker",
+  "version": "1.0.0",
+  "description": "DC Assignment",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JollyGood97/distributed-computing.git"
+  },
+  "type": "module",
+  "keywords": [
+    "distributed",
+    "computing",
+    "bully",
+    "algorithm",
+    "master",
+    "slave",
+    "password",
+    "crack"
+  ],
+  "author": "PERERA J.A.S.D - MS22037510",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JollyGood97/distributed-computing/issues"
+  },
+  "homepage": "https://github.com/JollyGood97/distributed-computing#readme",
+  "dependencies": {
+    "async-lock": "^1.4.0",
+    "axios": "^1.3.5",
+    "body-parser": "^1.20.2",
+    "consul": "^1.2.0",
+    "dotenv": "^16.0.3",
+    "eureka-js-client": "^4.5.0",
+    "express": "^4.18.2",
+    "express-actuator": "^1.8.4",
+    "random": "^4.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.38.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.27.5"
+  }
+}
