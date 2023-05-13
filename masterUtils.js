@@ -59,7 +59,8 @@ export const sendCompletionMessage = async (nodes, match) => {
         console.log(
           `Failed to send completion message to node on port ${node.port}`
         );
-        console.log(error);
+        // console.error(error);
+        continue; // This will skip the current iteration and move to the next node.
       }
     }
   }
